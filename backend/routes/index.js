@@ -1,5 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const { router: authRouter, authenticate } = require('./auth');
+
+router.use('/auth', authRouter);
+
+// Apply authentication to all routes
+router.use(authenticate);
 
 const models = {
   users: require('../model-defs/User'),
