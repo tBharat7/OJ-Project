@@ -13,6 +13,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,11 +24,13 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     if (token) {
       try {
-        await authService.validateToken(token);
+        const data = await authService.validateToken(token);
+        setUser(data.user);
         setIsAuthenticated(true);
       } catch (error) {
         localStorage.removeItem('token');
         setIsAuthenticated(false);
+        setUser(null);
       }
     }
     setLoading(false);
@@ -50,10 +53,12 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('token');
     setIsAuthenticated(false);
+    setUser(null);
   };
 
   const value = {
     isAuthenticated,
+    user,
     loading,
     login,
     register,
