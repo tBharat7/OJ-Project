@@ -26,6 +26,7 @@ const ProblemPage = () => {
   const [reviewOutput, setReviewOutput] = useState('');
   const [hasRun, setHasRun] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState(null);
   const [language, setLanguage] = useState('cpp');
 
   const codeTemplates = {
@@ -125,8 +126,10 @@ public class Main {
 
   const submitCode = async () => {
     setSubmitting(true);
+    setSubmissionResult(null);
+    
     try {
-      const response = await fetch(`${API_URL}/api/submissions`, {
+      const response = await fetch(`${API_URL}/api/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -134,19 +137,20 @@ public class Main {
         },
         body: JSON.stringify({
           problemID: id,
-          sourceCode: code,
-          status: 'Accepted',
-          score: 100
+          code,
+          language
         })
       });
       
-      if (response.ok) {
-        alert('Code submitted successfully!');
+      const result = await response.json();
+      
+      if (result.success) {
+        setSubmissionResult(result);
       } else {
-        alert('Submission failed');
+        setSubmissionResult({ error: result.error });
       }
     } catch (error) {
-      alert(`Error: ${error.message}`);
+      setSubmissionResult({ error: error.message });
     } finally {
       setSubmitting(false);
     }
@@ -215,7 +219,7 @@ public class Main {
                   />
                 </div>
                 <div className="flex-1">
-                  <h3 className="mb-2 text-sm font-semibold">Outpuut:</h3>
+                  <h3 className="mb-2 text-sm font-semibold">Output:</h3>
                   <div className="w-full h-20 p-2 bg-gray-800 border border-gray-600 rounded text-white overflow-auto">
                     <pre className="text-sm">{output}</pre>
                   </div>
@@ -251,6 +255,53 @@ public class Main {
                   <h3 className="mb-2 text-sm font-semibold">AI Review:</h3>
                   <div className="w-full p-4 bg-gray-800 border border-gray-600 rounded text-white">
                     <ReactMarkdown>{reviewOutput}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+              
+              {submissionResult && (
+                <div className="mt-4">
+                  <h3 className="mb-2 text-sm font-semibold">Submission Result:</h3>
+                  <div className="w-full p-4 bg-gray-800 border border-gray-600 rounded text-white">
+                    {submissionResult.error ? (
+                      <div className="text-red-400">
+                        <strong>Error:</strong> {submissionResult.error}
+                      </div>
+                    ) : (
+                      <div>
+                        <div className={`text-lg font-semibold mb-2 ${
+                          submissionResult.status === 'Accepted' ? 'text-green-400' :
+                          submissionResult.status === 'Compilation Error' ? 'text-red-400' :
+                          submissionResult.status === 'Runtime Error' ? 'text-orange-400' :
+                          'text-yellow-400'
+                        }`}>
+                          {submissionResult.status}
+                        </div>
+                        <div className="text-gray-300">
+                          Score: {submissionResult.score}/100
+                        </div>
+                        {submissionResult.passedTests !== undefined && (
+                          <div className="text-gray-300">
+                            Test Cases: {submissionResult.passedTests}/{submissionResult.totalTests} passed
+                          </div>
+                        )}
+                        {submissionResult.firstFailure && (
+                          <div className="mt-2 text-red-300">
+                            <strong>First Failure (Test Case {submissionResult.firstFailure.testCase}):</strong>
+                            <div className="mt-1">
+                              {submissionResult.firstFailure.error === 'Wrong Answer' ? (
+                                <div>
+                                  <div>Expected: {submissionResult.firstFailure.expected}</div>
+                                  <div>Got: {submissionResult.firstFailure.actual}</div>
+                                </div>
+                              ) : (
+                                <div>{submissionResult.firstFailure.details}</div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

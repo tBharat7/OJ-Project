@@ -1,10 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { router: authRouter, authenticate } = require('./auth');
-const fs = require('fs').promises;
-const { exec } = require('child_process');
-const path = require('path');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const axios = require('axios');
 
 require('dotenv').config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -20,44 +18,15 @@ const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, ne
 router.post('/execute', asyncHandler(async (req, res) => {
   const { code, input = '', language = 'cpp' } = req.body;
   
-  const tempDir = path.join(__dirname, '../../temp');
-  await fs.mkdir(tempDir, { recursive: true });
-  
-  const filename = `code_${Date.now()}`;
-  let sourceFile, execFile, compileCmd;
-  
-  if (language === 'java') {
-    sourceFile = path.join(tempDir, 'Main.java');
-    execFile = path.join(tempDir, 'Main');
-    compileCmd = `javac "${sourceFile}" && cd "${tempDir}" && java Main`;
-  } else {
-    sourceFile = path.join(tempDir, `${filename}.cpp`);
-    execFile = path.join(tempDir, filename);
-    compileCmd = `clang++ -std=c++17 "${sourceFile}" -o "${execFile}" && "${execFile}"`;
-  }
-  
   try {
-    await fs.writeFile(sourceFile, code);
-    
-    const child = exec(compileCmd, { timeout: 5000 }, (error, stdout, stderr) => {
-      fs.unlink(sourceFile).catch(() => {});
-      if (language === 'java') {
-        fs.unlink(path.join(tempDir, 'Main.class')).catch(() => {});
-      } else {
-        fs.unlink(execFile).catch(() => {});
-      }
-      
-      if (error) {
-        return res.json({ success: false, error: stderr || error.message });
-      }
-      
-      res.json({ success: true, output: stdout, error: stderr });
+    const compilerUrl = process.env.COMPILER_SERVICE_URL || 'http://localhost:3001';
+    const response = await axios.post(`${compilerUrl}/execute`, {
+      code,
+      input,
+      language
     });
     
-    if (input) {
-      child.stdin.write(input);
-      child.stdin.end();
-    }
+    res.json(response.data);
   } catch (error) {
     res.json({ success: false, error: error.message });
   }
@@ -92,6 +61,53 @@ Provide a concise review with specific suggestions for improvement. Avoid any ha
   }
 }));
 
+// Submission evaluation route
+router.post('/submit', asyncHandler(async (req, res) => {
+  const { problemID, code, language = 'cpp' } = req.body;
+  
+  try {
+    const Problem = require('../model-defs/Problem');
+    const Submission = require('../model-defs/Submission');
+    
+    const problem = await Problem.findById(problemID);
+    if (!problem) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    
+    if (!problem.testCases || problem.testCases.length === 0) {
+      return res.json({ success: false, error: 'No test cases available for this problem' });
+    }
+    
+    // Send to compiler service for evaluation
+    const compilerUrl = process.env.COMPILER_SERVICE_URL || 'http://localhost:3001';
+    const response = await axios.post(`${compilerUrl}/evaluate`, {
+      code,
+      testCases: problem.testCases,
+      language
+    });
+    
+    const result = response.data;
+    
+    if (!result.success) {
+      return res.json(result);
+    }
+    
+    // Save submission
+    await Submission.create({
+      userID: req.userId,
+      problemID,
+      sourceCode: code,
+      status: result.status,
+      score: result.score
+    });
+    
+    res.json(result);
+    
+  } catch (error) {
+    res.json({ success: false, error: error.message });
+  }
+}));
+
 const models = {
   users: require('../model-defs/User'),
   problems: require('../model-defs/Problem'),
@@ -113,8 +129,10 @@ function crudRoutes(resource, Model) {
   }));
   
   router.post(`/${resource}`, asyncHandler(async (req, res) => {
-    const body = resource === 'submissions' ? { ...req.body, userID: req.userId } : req.body;
-    const data = await Model.create(body);
+    if (resource === 'submissions') {
+      return res.status(400).json({ error: 'Use /api/submit endpoint for submissions' });
+    }
+    const data = await Model.create(req.body);
     res.status(201).json(data);
   }));
   

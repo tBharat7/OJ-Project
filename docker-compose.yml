@@ -1,23 +1,33 @@
 services:
-  oj:
-    build: .
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - MONGODB_URL=${MONGODB_URL}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - PORT=3000
+      - COMPILER_SERVICE_URL=http://compiler-server:3001
+      - MONGODB_URL=mongodb+srv://bharat:Mikasa%4078@cluster0.pqejuot.mongodb.net/ojproject?retryWrites=true&w=majority&appName=Cluster0
     depends_on:
-      - mongo
-    volumes:
-      - ./temp:/app/temp
+      - compiler-server
 
-  mongo:
-    image: mongo:7
+  compiler-server:
+    build: ./compiler-server
     ports:
-      - "27017:27017"
+      - "3001:3001"
+    environment:
+      - COMPILER_PORT=3001
     volumes:
-      - mongo_data:/data/db
+      - /tmp:/tmp
 
-volumes:
-  mongo_data:

@@ -5,8 +5,10 @@ dotenv.config();
 
 const dbConnect = async () => {
     try {
-        await mongoose.connect(process.env.MONGODB_URL);
-        console.log('Connected to MongoDB');
+        const uri = process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017/oj-project';
+        await mongoose.connect(uri);
+        console.log('Connected to MongoDB:', uri);
+        console.log('Database name:', mongoose.connection.db.databaseName);
     } catch (error) {
         console.error('Error connecting to MongoDB:', error);
         process.exit(1);
