@@ -4,7 +4,7 @@
   "description": "Backend API server for Online Judge",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node start.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
